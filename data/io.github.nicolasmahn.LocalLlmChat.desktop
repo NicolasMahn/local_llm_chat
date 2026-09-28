@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Local LLM Chat
+Comment=Chat with the models on your own machine
+Exec=chat.py
+Icon=chat-message-new-symbolic
+Terminal=false
+Categories=Utility;
+Keywords=llm;ai;chat;gemma;qwen;
+StartupNotify=true
