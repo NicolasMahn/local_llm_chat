@@ -6,15 +6,11 @@ sidebar, saved as JSON in `~/.local/share/local-llm/chats/`.
 
 Pictures and videos (PNG, JPEG, WebP, GIF, MP4, WebM, up to 50 MB) go to
 `gemma-4-26b`, the one model there that can see; with another model selected
-the window says so instead. While `qwen3-asr` runs, a microphone button
-records until pressed again and puts the transcript in the message field, and
-"let's talk" holds a spoken conversation: it listens until you pause, sends
-what you said, reads the answer aloud and listens again.
+the window says so instead.
 
-It needs GTK 4 and libadwaita with their Python bindings, numpy, PipeWire's
-`pw-record` and speech-dispatcher's `spd-say`. On Fedora:
+It needs GTK 4 and libadwaita with their Python bindings. On Fedora:
 
-    sudo dnf install python3-gobject libadwaita python3-numpy pipewire-utils speech-dispatcher-utils
+    sudo dnf install python3-gobject libadwaita
     ./install.sh
 
 `install.sh` puts "Local LLM Chat" in the app grid; the local_llm top-bar

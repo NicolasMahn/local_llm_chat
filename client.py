@@ -1,47 +1,29 @@
-"""Calls to the local gateway, shared by the chat window and its voice mode."""
+"""Calls to the local_llm gateway."""
 
 import json
 import os
 import urllib.request
-import uuid
 
 from gi.repository import GLib
 
 GATEWAY = os.environ.get("LOCAL_LLM_GATEWAY", "http://127.0.0.1:8400")
-AUDIO_MODEL = "qwen3-asr"
 # Only these models can look at pictures and videos (vLLM loads their vision part).
 VISION_MODELS = {"gemma-4-26b"}
 KEY_FILE = os.path.join(GLib.get_user_config_dir(), "local-llm", "api-key")
 
 
-def request(path, data=None, content_type="application/json"):
+def request(path, data=None):
     # Read on every call: the llm script creates the key on its first start.
     with open(KEY_FILE) as key:
         headers = {"authorization": f"Bearer {key.read().strip()}"}
     if data is not None:
-        headers["content-type"] = content_type
+        headers["content-type"] = "application/json"
     return urllib.request.Request(GATEWAY + path, data=data, headers=headers)
 
 
 def running_models():
     with urllib.request.urlopen(request("/v1/models"), timeout=3) as response:
         return [model["id"] for model in json.load(response)["data"]]
-
-
-def transcribe(wav):
-    """Text of a WAV recording, given as bytes."""
-    boundary = uuid.uuid4().hex
-    body = b"".join([
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n"
-        f"{AUDIO_MODEL}\r\n".encode(),
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
-        f"filename=\"speech.wav\"\r\nContent-Type: audio/wav\r\n\r\n".encode(),
-        wav,
-        f"\r\n--{boundary}--\r\n".encode(),
-    ])
-    upload = request("/v1/audio/transcriptions", body, f"multipart/form-data; boundary={boundary}")
-    with urllib.request.urlopen(upload) as response:
-        return json.load(response)["text"].strip()
 
 
 def for_model(model, messages):

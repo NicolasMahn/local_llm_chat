@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 """The chat window: past chats on the left, the conversation on the right.
 
-Pictures and videos can be attached for models that can see them. While
-speech-to-text runs, the microphone dictates into the message field and
-"let's talk" holds a spoken conversation: it listens until you stop, sends
-what you said, reads the answer aloud and listens again.
+Pictures and videos can be attached for models that can see them.
 """
 
 import base64
-import os
-import signal
-import subprocess
-import tempfile
 import threading
 from dataclasses import dataclass
 
@@ -23,7 +16,6 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango  # noqa: E402
 
 import chats  # noqa: E402
 import client  # noqa: E402
-import voice  # noqa: E402
 
 # The formats Gemma was tested with; everything else is turned away at the door.
 MEDIA_TYPES = {
@@ -43,20 +35,6 @@ class Attachment:
     def part(self):
         url = f"data:{self.mime};base64,{base64.b64encode(self.data).decode()}"
         return {"type": f"{self.kind}_url", f"{self.kind}_url": {"url": url}}
-
-
-def on_main(function, *args):
-    """Runs function on the GTK thread and returns its result, for worker threads."""
-    done, result = threading.Event(), []
-
-    def run():
-        result.append(function(*args))
-        done.set()
-        return GLib.SOURCE_REMOVE
-
-    GLib.idle_add(run)
-    done.wait()
-    return result[0]
 
 
 def preview(kind, data, size):
@@ -91,8 +69,6 @@ class ChatWindow(Adw.ApplicationWindow):
         super().__init__(application=app, default_width=860, default_height=620)
         self.chat = chats.Chat()
         self.pending = []  # attachments for the next message
-        self.recording = None  # (pw-record process, wav path) while dictating
-        self.talk_stop = None  # set to end the spoken conversation
         self.replying = False  # one answer at a time keeps the saved turns in order
 
         self.model_picker = Gtk.DropDown()
@@ -119,15 +95,11 @@ class ChatWindow(Adw.ApplicationWindow):
         self.entry.connect("activate", lambda _: self.send())
         attach = Gtk.Button(icon_name="mail-attachment-symbolic", tooltip_text="Attach a picture or video")
         attach.connect("clicked", self.on_attach)
-        self.mic = Gtk.ToggleButton(icon_name="audio-input-microphone-symbolic", tooltip_text="Dictate")
-        self.mic.connect("toggled", self.on_mic_toggled)
-        self.talk = Gtk.ToggleButton(icon_name="call-start-symbolic", tooltip_text="Let's talk")
-        self.talk.connect("toggled", self.on_talk_toggled)
         send = Gtk.Button(icon_name="go-up-symbolic", tooltip_text="Send", css_classes=["suggested-action"])
         send.connect("clicked", lambda _: self.send())
 
         input_row = Gtk.Box(spacing=6, margin_start=12, margin_end=12, margin_top=12, margin_bottom=12)
-        for widget in (attach, self.mic, self.talk, self.entry, send):
+        for widget in (attach, self.entry, send):
             input_row.append(widget)
         bottom = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         bottom.append(self.attachments)
@@ -157,22 +129,18 @@ class ChatWindow(Adw.ApplicationWindow):
         self.reload_chats()
         self.entry.grab_focus()
 
-    # --- Models and speech availability
+    # --- Models
 
     def refresh_models(self):
         try:
-            running = client.running_models()
+            models = client.running_models()
         except OSError:
-            running = []
-        models = [name for name in running if name != client.AUDIO_MODEL]
+            models = []
         current = self.selected_model()
         self.model_picker.set_model(Gtk.StringList.new(models or ["no models running"]))
         self.model_picker.set_sensitive(bool(models))
         if current in models:
             self.model_picker.set_selected(models.index(current))
-        speech = client.AUDIO_MODEL in running
-        self.mic.set_visible(speech or self.mic.get_active())
-        self.talk.set_visible(speech or self.talk.get_active())
 
     def selected_model(self):
         item = self.model_picker.get_selected_item()
@@ -285,7 +253,7 @@ class ChatWindow(Adw.ApplicationWindow):
             threading.Thread(target=self.reply, args=turn, daemon=True).start()
 
     def reply(self, chat, model, messages, label):
-        """Worker thread: streams the answer into label and saves it; returns it, or None."""
+        """Worker thread: streams the answer into label and saves it."""
         try:
             answer = client.stream_reply(
                 model, messages,
@@ -293,9 +261,8 @@ class ChatWindow(Adw.ApplicationWindow):
                 on_thinking=lambda: GLib.idle_add(label.set_label, "thinking…"))
         except OSError as error:
             GLib.idle_add(self.finish_turn, chat, label, None, f"Could not reach {model}: {error}")
-            return None
+            return
         GLib.idle_add(self.finish_turn, chat, label, answer, None)
-        return answer
 
     def finish_turn(self, chat, label, answer, error):
         self.replying = False
@@ -368,86 +335,6 @@ class ChatWindow(Adw.ApplicationWindow):
     def remove_attachment(self, attachment):
         self.pending.remove(attachment)
         self.show_pending()
-
-    # --- Dictation: record until pressed again, then put the text in the field
-
-    def on_mic_toggled(self, button):
-        if button.get_active():
-            wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
-            self.recording = (subprocess.Popen(
-                ["pw-record", "--rate", "16000", "--channels", "1", wav]), wav)
-            return
-
-        process, wav = self.recording
-        self.recording = None
-        # SIGINT lets pw-record finish the WAV header; a kill would leave it broken.
-        process.send_signal(signal.SIGINT)
-        process.wait()
-        self.entry.set_placeholder_text("Transcribing…")
-        threading.Thread(target=self.transcribe_into_entry, args=(wav,), daemon=True).start()
-
-    def transcribe_into_entry(self, wav):
-        try:
-            with open(wav, "rb") as audio:
-                text = client.transcribe(audio.read())
-            placeholder = "Message"
-        except OSError as error:
-            text, placeholder = "", f"Speech failed: {error}"
-        finally:
-            os.unlink(wav)
-        GLib.idle_add(self.put_transcript, text, placeholder)
-
-    def put_transcript(self, text, placeholder):
-        self.entry.set_placeholder_text(placeholder)
-        self.entry.set_text((self.entry.get_text() + " " + text).strip())
-        self.entry.grab_focus()
-        self.entry.set_position(-1)
-
-    # --- Let's talk: a spoken conversation until the button is pressed again
-
-    def on_talk_toggled(self, button):
-        if button.get_active():
-            self.talk_stop = threading.Event()
-            threading.Thread(target=self.talk_loop, args=(self.talk_stop,), daemon=True).start()
-        elif self.talk_stop:
-            self.talk_stop.set()
-            voice.stop_speaking()
-
-    def talk_loop(self, stopped):
-        """Worker thread: listen, send what was said, read the answer aloud, repeat."""
-        def status(text):
-            GLib.idle_add(self.entry.set_placeholder_text, text)
-
-        problem = None
-        while not stopped.is_set():
-            status("Listening…")
-            try:
-                wav = voice.listen(stopped)
-                if wav is None:
-                    break
-                status("Transcribing…")
-                text = client.transcribe(wav)
-            except OSError as error:
-                problem = f"Let's talk stopped: {error}"
-                break
-            if not text or stopped.is_set():
-                continue
-            turn = on_main(self.start_turn, text)
-            if turn is None:
-                break
-            status("Thinking…")
-            answer = self.reply(*turn)
-            if answer is None or stopped.is_set():
-                break
-            status("Speaking…")
-            voice.speak(answer)
-        GLib.idle_add(self.end_talk, problem)
-
-    def end_talk(self, problem):
-        self.entry.set_placeholder_text("Message")
-        self.talk.set_active(False)
-        if problem:
-            self.toast(problem)
 
 
 def present(app):
