@@ -1,0 +1,11 @@
+/* Added on top of style.css while the system uses the dark style: a neutral
+   near-black instead of Adwaita's grey, with a hint of the accent color, and
+   the header the same color as the conversation so the drawer reads as one
+   surface. */
+window {
+  --accent-color: oklab(from var(--accent-bg-color) max(l, 0.8) a b);
+  --window-bg-color: color-mix(in oklab, var(--accent-bg-color) 4%, #121212);
+  --sidebar-bg-color: color-mix(in oklab, var(--accent-bg-color) 6%, #1a1a1a);
+  --popover-bg-color: color-mix(in oklab, var(--accent-bg-color) 5%, #1f1f1f);
+  --card-bg-color: rgb(255 255 255 / 6%);
+}

@@ -1,0 +1,118 @@
+/* The chat takes its colors from libadwaita, so it follows the system's accent
+   color and dark style. Plain chats use your accent; work and private chats
+   replace it with a color of their own, in the whole window. The three share
+   the saturation of GNOME's accents and one lightness, the lightest that keeps
+   white text readable on them (4.5:1), and differ only in hue, so they read as
+   one set whatever your accent is. */
+:root {
+  --work-bg-color: oklch(0.58 0.19 48);
+  --private-bg-color: oklch(0.58 0.19 308);
+  --private-work-bg-color: oklch(0.58 0.19 345);
+}
+
+window.work {
+  --accent-bg-color: var(--work-bg-color);
+}
+
+window.private {
+  --accent-bg-color: var(--private-bg-color);
+}
+
+window.private.work {
+  --accent-bg-color: var(--private-work-bg-color);
+}
+
+/* Everything else is derived from the accent, so one color carries through:
+   text and borders in it (darkened to stay readable, as libadwaita does), and
+   surfaces with a hint of it. */
+window {
+  --accent-color: oklab(from var(--accent-bg-color) min(l, 0.5) a b);
+  --window-bg-color: color-mix(in oklab, var(--accent-bg-color) 3%, #fafafb);
+  --view-bg-color: var(--window-bg-color);
+  --headerbar-bg-color: var(--window-bg-color);
+  --headerbar-backdrop-color: var(--window-bg-color);
+  --headerbar-shade-color: transparent;
+  --sidebar-bg-color: color-mix(in oklab, var(--accent-bg-color) 5%, #ebebed);
+  --sidebar-backdrop-color: var(--sidebar-bg-color);
+  --popover-bg-color: color-mix(in oklab, var(--accent-bg-color) 2%, #ffffff);
+  --dialog-bg-color: var(--popover-bg-color);
+}
+
+.user-message {
+  background: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+  border-radius: 18px;
+  padding: 8px 14px;
+}
+
+.user-message label selection {
+  background: alpha(var(--accent-fg-color), 0.3);
+}
+
+.composer {
+  background: var(--card-bg-color);
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px alpha(var(--accent-color), 0.35);
+  padding: 6px;
+}
+
+.work .composer,
+.private .composer {
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.composer textview,
+.composer textview text {
+  background: none;
+}
+
+.private-toggle:checked {
+  color: var(--accent-color);
+  background: alpha(var(--accent-color), 0.12);
+}
+
+.note {
+  font-size: smaller;
+}
+
+.code {
+  background: var(--card-bg-color);
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+
+.code:not(:hover) .copy {
+  opacity: 0;
+}
+
+.table {
+  padding: 8px 12px;
+}
+
+.quote {
+  border-left: 3px solid var(--border-color);
+  padding-left: 12px;
+}
+
+.work-chat {
+  color: var(--work-bg-color);
+}
+
+.private-chat {
+  color: var(--private-bg-color);
+}
+
+.private-work-chat {
+  color: var(--private-work-bg-color);
+}
+
+/* The delete button shows on the row you point at, not on every chat. */
+.chat-row:not(:hover):not(:focus-within) .delete {
+  opacity: 0;
+}
+
+/* The drawer fills the space between the top bar and the bottom of the screen,
+   against its right edge: round corners would show what lies behind. */
+window.drawer {
+  border-radius: 0;
+}

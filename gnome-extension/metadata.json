@@ -1,0 +1,7 @@
+{
+  "uuid": "local-llm-chat@nicolas",
+  "name": "Local LLM Chat",
+  "description": "Slides the chat in over the right edge of the screen, like a drawer.",
+  "shell-version": ["49"],
+  "version": 1
+}
